@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, X, Edit2, Check } from 'lucide-react';
-import { GridImage, GridSettings } from '../types';
+import type { GridImage, GridSettings } from '../types';
 import { cn } from '../lib/utils';
 
 interface ImageCardProps {
-  key?: React.Key;
   image: GridImage;
   settings: GridSettings;
+  columnCount: number;
   onDelete: (id: string) => void;
   onTitleChange: (id: string, newTitle: string) => void;
   isExporting: boolean;
@@ -17,6 +17,7 @@ interface ImageCardProps {
 export function ImageCard({
   image,
   settings,
+  columnCount,
   onDelete,
   onTitleChange,
   isExporting,
@@ -32,6 +33,10 @@ export function ImageCard({
 
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(image.title);
+
+  // Scale font based on column count. At 3 columns = full size. More columns = smaller.
+  const scale = Math.min(1, 3 / Math.max(1, columnCount));
+  const scaledFontSize = Math.max(2, settings.titleFontSize * scale);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -61,13 +66,15 @@ export function ImageCard({
 
   const renderTitle = (position: 'top' | 'bottom' | 'overlay') => {
     if (!settings.showTitles || settings.titlePosition !== position) return null;
+
     return (
-      <div className={cn(
-        "flex items-center justify-center relative min-h-[24px]",
-        position === 'top' && "mb-2",
-        position === 'bottom' && "mt-2",
-        position === 'overlay' && "absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1 z-10"
-      )}>
+      <div
+        className={cn(
+          "flex items-center justify-center w-full overflow-hidden",
+          position === 'overlay' && "absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm z-10"
+        )}
+        style={{ padding: `${Math.max(0, 2 * scale)}px 0` }}
+      >
         {isEditing && !isExporting ? (
           <div className="flex items-center gap-1 w-full px-1">
             <input
@@ -77,21 +84,30 @@ export function ImageCard({
               onKeyDown={handleKeyDown}
               onBlur={handleSaveTitle}
               autoFocus
-              className="flex-1 bg-white/10 border border-white/20 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 min-w-0"
-              style={{ color: settings.titleColor, fontSize: `${settings.titleFontSize}px` }}
+              className="flex-1 bg-white/10 border border-white/20 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-w-0"
+              style={{ color: settings.titleColor, fontSize: `${scaledFontSize}px` }}
             />
             <button
               onClick={handleSaveTitle}
               className="p-1 text-green-500 hover:bg-white/10 rounded shrink-0"
             >
-              <Check size={14} />
+              <Check size={Math.max(8, 14 * scale)} />
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-1 group/title w-full justify-center px-1">
+          <div className="flex items-center group/title w-full justify-center overflow-hidden">
             <span
-              className="truncate text-center font-medium"
-              style={{ color: settings.titleColor, fontSize: `${settings.titleFontSize}px` }}
+              className="text-center font-medium w-full"
+              style={{
+                color: settings.titleColor,
+                fontSize: `${scaledFontSize}px`,
+                lineHeight: 1.2,
+                overflow: 'hidden',
+                wordBreak: 'break-all',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+              }}
               title={image.title}
             >
               {image.title}
@@ -99,9 +115,9 @@ export function ImageCard({
             {!isExporting && (
               <button
                 onClick={() => setIsEditing(true)}
-                className="opacity-0 group-hover/title:opacity-100 p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all shrink-0"
+                className="opacity-0 group-hover/title:opacity-100 p-0.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all shrink-0"
               >
-                <Edit2 size={12} />
+                <Edit2 size={Math.max(8, 12 * scale)} />
               </button>
             )}
           </div>
@@ -115,7 +131,7 @@ export function ImageCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative group flex flex-col overflow-hidden",
+        "relative group flex flex-col",
         isDragging && "shadow-2xl ring-2 ring-indigo-500"
       )}
     >
@@ -123,7 +139,7 @@ export function ImageCard({
 
       {/* Image Container */}
       <div
-        className="relative w-full overflow-hidden flex-grow"
+        className="relative w-full overflow-hidden"
         style={{
           aspectRatio: settings.aspectRatio === 'auto' ? undefined : settings.aspectRatio,
           borderRadius: `${settings.borderRadius}px`,

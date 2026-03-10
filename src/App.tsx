@@ -154,23 +154,211 @@ export default function App() {
   };
 
   const handleExport = async () => {
-    if (!gridRef.current || images.length === 0) return;
-    
+    if (images.length === 0) return;
+
     try {
       setIsExporting(true);
-      // Small delay to ensure UI updates (hiding controls) before capture
       await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Load all images as HTMLImageElements to get natural dimensions
+      const loadedImgs = await Promise.all(
+        images.map(img => new Promise<HTMLImageElement>((resolve, reject) => {
+          const el = new Image();
+          el.crossOrigin = 'anonymous';
+          el.onload = () => resolve(el);
+          el.onerror = reject;
+          el.src = img.url;
+        }))
+      );
+
+      // Determine grid layout
+      const cols = settings.dynamicColumns ? Math.max(1, images.length) : settings.columns;
+      const rows = Math.ceil(images.length / cols);
+      const gap = settings.gap;
+
+      // Find the max natural width and height per column/row for uniform cells
+      // Use the first image's natural size as baseline for all cells
+      const cellNatW = loadedImgs[0].naturalWidth;
+      const cellNatH = settings.aspectRatio === 'auto'
+        ? loadedImgs[0].naturalHeight
+        : cellNatW / parseFloat(settings.aspectRatio || '1');
+
+      // Determine rendered cell width to perfectly match proportional DOM font size
+      let renderedCellW = 200; // Fallback
+      if (gridRef.current) {
+        const imgElements = gridRef.current.querySelectorAll('img');
+        if (imgElements.length > 0) {
+          renderedCellW = imgElements[0].getBoundingClientRect().width;
+        }
+      }
+
+      // Calculate title height at native resolution perfectly matching DOM proportions
+      const titleScale = Math.min(1, 3 / Math.max(1, cols));
+      const domFontSize = Math.max(2, settings.titleFontSize * titleScale);
+      const nativeFontSize = domFontSize * (cellNatW / Math.max(1, renderedCellW));
       
-      const dataUrl = await toPng(gridRef.current, {
-        quality: 1,
-        pixelRatio: 2,
-        backgroundColor: settings.backgroundColor,
-      });
-      
-      const link = document.createElement('a');
-      link.download = `grid-${Date.now()}.png`;
-      link.href = dataUrl;
-      link.click();
+      const titleHeight = settings.showTitles && settings.titlePosition !== 'overlay'
+        ? nativeFontSize * 2.4 : 0; // Accommodate 2 lines of text (1.2 line height)
+
+      // Scale gap proportionally to native resolution
+      const nativeGap = settings.gap * (cellNatW / Math.max(1, renderedCellW));
+
+      // Canvas dimensions
+      const canvasW = cols * cellNatW + (cols + 1) * nativeGap;
+      const canvasH = rows * (cellNatH + titleHeight) + (rows + 1) * nativeGap;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(canvasW);
+      canvas.height = Math.round(canvasH);
+      const ctx = canvas.getContext('2d')!;
+
+      // Helper function to wrap text mimicking `word-break: break-all` and `line-clamp: 2`
+      const drawWrappedText = (text: string, x: number, y: number, maxWidth: number, maxLines: number, lineHeight: number) => {
+        const lines: string[] = [];
+        let currentLine = '';
+        
+        // break-all behavior: iterate char by char
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          const testLine = currentLine + char;
+          const metrics = ctx.measureText(testLine);
+          
+          if (metrics.width > maxWidth && i > 0) {
+            lines.push(currentLine);
+            currentLine = char;
+            if (lines.length === maxLines) {
+              // We hit the max lines before adding this line!
+              break;
+            }
+          } else {
+            currentLine = testLine;
+          }
+        }
+        
+        if (lines.length < maxLines) {
+          lines.push(currentLine);
+        } else {
+          // If we truncated, add ellipsis to the last line
+          let lastLine = lines[maxLines - 1];
+          while (ctx.measureText(lastLine + '...').width > maxWidth && lastLine.length > 0) {
+            lastLine = lastLine.slice(0, -1);
+          }
+          lines[maxLines - 1] = lastLine + '...';
+        }
+
+        // Draw the lines centered
+        // Calculate starting Y to vertically center the text block
+        const totalTextHeight = lines.length * lineHeight;
+        const startY = y - (totalTextHeight / 2) + (lineHeight / 2);
+
+        lines.forEach((line, index) => {
+          ctx.fillText(line.trim(), x, startY + (index * lineHeight));
+        });
+      };
+
+      // Background
+      ctx.fillStyle = settings.backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw each image
+      for (let i = 0; i < images.length; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const imgEl = loadedImgs[i];
+
+        const cellX = nativeGap + col * (cellNatW + nativeGap);
+        const imgY = nativeGap + row * (cellNatH + titleHeight + nativeGap)
+          + (settings.titlePosition === 'top' ? titleHeight : 0);
+
+        // Draw border if configured
+        if (settings.borderWidth > 0) {
+          const bw = settings.borderWidth * (cellNatW / Math.max(1, renderedCellW));
+          ctx.strokeStyle = settings.borderColor;
+          ctx.lineWidth = bw;
+          ctx.strokeRect(cellX - bw / 2, imgY - bw / 2, cellNatW + bw, cellNatH + bw);
+        }
+
+        // Draw image (cover fit: fill the cell, cropping as needed)
+        const imgRatio = imgEl.naturalWidth / imgEl.naturalHeight;
+        const cellRatio = cellNatW / cellNatH;
+        let sx = 0, sy = 0, sw = imgEl.naturalWidth, sh = imgEl.naturalHeight;
+
+        if (settings.objectFit === 'cover') {
+          if (imgRatio > cellRatio) {
+            sw = imgEl.naturalHeight * cellRatio;
+            sx = (imgEl.naturalWidth - sw) / 2;
+          } else {
+            sh = imgEl.naturalWidth / cellRatio;
+            sy = (imgEl.naturalHeight - sh) / 2;
+          }
+          ctx.drawImage(imgEl, sx, sy, sw, sh, cellX, imgY, cellNatW, cellNatH);
+        } else if (settings.objectFit === 'contain') {
+          let drawW = cellNatW, drawH = cellNatH;
+          if (imgRatio > cellRatio) {
+            drawH = cellNatW / imgRatio;
+          } else {
+            drawW = cellNatH * imgRatio;
+          }
+          const dx = cellX + (cellNatW - drawW) / 2;
+          const dy = imgY + (cellNatH - drawH) / 2;
+          ctx.drawImage(imgEl, dx, dy, drawW, drawH);
+        } else {
+          ctx.drawImage(imgEl, cellX, imgY, cellNatW, cellNatH);
+        }
+
+        // Draw title
+        if (settings.showTitles && titleHeight > 0) {
+          const titleY = settings.titlePosition === 'top'
+            ? imgY - (titleHeight / 2)
+            : imgY + cellNatH + (titleHeight / 2);
+
+          ctx.fillStyle = settings.titleColor;
+          ctx.font = `500 ${nativeFontSize}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          drawWrappedText(
+            images[i].title, 
+            cellX + cellNatW / 2, 
+            titleY, 
+            cellNatW - (nativeFontSize * 0.5), // padding
+            2, 
+            nativeFontSize * 1.2
+          );
+        }
+
+        // Overlay title
+        if (settings.showTitles && settings.titlePosition === 'overlay') {
+          const overlayH = nativeFontSize * 2.8;
+          ctx.fillStyle = 'rgba(0,0,0,0.6)';
+          ctx.fillRect(cellX, imgY + cellNatH - overlayH, cellNatW, overlayH);
+          
+          ctx.fillStyle = settings.titleColor;
+          ctx.font = `500 ${nativeFontSize}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          drawWrappedText(
+            images[i].title, 
+            cellX + cellNatW / 2, 
+            imgY + cellNatH - (overlayH / 2), 
+            cellNatW - (nativeFontSize * 1), // padding
+            2, 
+            nativeFontSize * 1.2
+          );
+        }
+      }
+
+      // Export canvas to blob and download
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `grid-${Date.now()}.png`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
     } catch (err) {
       console.error('Failed to export image', err);
       alert('Failed to export image. See console for details.');
@@ -191,17 +379,17 @@ export default function App() {
       <div className="fixed inset-0 pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAgMGg2NHY2NEgweiIgZmlsbD0ibm9uZSIvPPHBhdGggZD0iTTAgMGgxdjY0SDB6TTAgMGg2NHYxSDB6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDIpIi8+PC9zdmc+')] opacity-50 -z-10" />
 
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 h-16 border-b border-white/[0.06] bg-[#050506]/80 backdrop-blur-md z-20 flex items-center px-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
-            <ImageIcon className="text-indigo-400" size={20} />
+      <header className="fixed top-0 left-0 right-0 h-12 border-b border-white/[0.06] bg-[#050506]/80 backdrop-blur-md z-20 flex items-center px-4">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+            <ImageIcon className="text-indigo-400" size={16} />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">Grid Builder</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Grid Builder</h1>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="pt-24 pb-32 px-6 w-full mx-auto min-h-screen flex flex-col">
+      <main className="pt-20 pb-32 px-6 w-full mx-auto min-h-screen flex flex-col">
         {images.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-2xl bg-white/[0.02] p-12 text-center">
             <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6">
@@ -226,7 +414,7 @@ export default function App() {
           <div className="flex flex-col items-center">
             {/* Export Container - This is what gets captured */}
             <div 
-              className="p-8 rounded-xl transition-all duration-300"
+              className="rounded-xl transition-all duration-300"
               style={{ backgroundColor: settings.backgroundColor }}
             >
               <div
@@ -258,6 +446,7 @@ export default function App() {
                         key={image.id}
                         image={image}
                         settings={settings}
+                        columnCount={settings.dynamicColumns ? Math.max(1, images.length) : settings.columns}
                         onDelete={handleDelete}
                         onTitleChange={handleTitleChange}
                         isExporting={isExporting}
