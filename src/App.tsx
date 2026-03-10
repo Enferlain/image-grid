@@ -201,7 +201,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="pt-24 pb-32 px-6 max-w-[1600px] mx-auto min-h-screen flex flex-col">
+      <main className="pt-24 pb-32 px-6 w-full mx-auto min-h-screen flex flex-col">
         {images.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-2xl bg-white/[0.02] p-12 text-center">
             <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6">
@@ -231,9 +231,14 @@ export default function App() {
             >
               <div
                 ref={gridRef}
-                className="grid w-full"
+                className={cn(
+                  "w-full",
+                  settings.layoutMode === 'grid' ? "grid" : "flex overflow-x-auto snap-x snap-mandatory"
+                )}
                 style={{
-                  gridTemplateColumns: `repeat(${settings.dynamicColumns ? Math.max(1, images.length) : settings.columns}, minmax(0, 1fr))`,
+                  ...(settings.layoutMode === 'grid' ? {
+                    gridTemplateColumns: `repeat(${settings.dynamicColumns ? Math.max(1, images.length) : settings.columns}, minmax(0, 1fr))`,
+                  } : {}),
                   gap: `${settings.gap}px`,
                   backgroundColor: settings.backgroundColor,
                   padding: `${settings.gap}px`, // Add padding equal to gap for outer edges

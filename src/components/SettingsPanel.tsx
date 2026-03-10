@@ -62,33 +62,75 @@ export function SettingsPanel({
             <h3 className="text-xs font-mono tracking-widest text-indigo-400 uppercase">Layout</h3>
             
             <div className="space-y-2">
-              <label className="flex justify-between items-center">
-                <span>Columns</span>
-                <div className="flex items-center gap-3">
-                  <label className="text-xs flex items-center gap-1 cursor-pointer text-gray-400 hover:text-white">
-                    <input
-                      type="checkbox"
-                      checked={settings.dynamicColumns}
-                      onChange={(e) => handleChange('dynamicColumns', e.target.checked)}
-                      className="rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
-                    />
-                    Auto
-                  </label>
-                  <span className="text-white w-4 text-right">{settings.dynamicColumns ? (imagesCount || 1) : settings.columns}</span>
-                </div>
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="24"
-                value={settings.dynamicColumns ? Math.max(1, imagesCount) : settings.columns}
-                onChange={(e) => {
-                  handleChange('dynamicColumns', false);
-                  handleChange('columns', parseInt(e.target.value));
-                }}
-                className="w-full accent-indigo-500"
-              />
+              <label className="block mb-1">Layout Mode</label>
+              <div className="flex bg-[#0F0F12] border border-white/10 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => handleChange('layoutMode', 'grid')}
+                  className={cn(
+                    "flex-1 py-2 text-sm font-medium transition-colors",
+                    settings.layoutMode === 'grid' ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  Grid
+                </button>
+                <button
+                  onClick={() => handleChange('layoutMode', 'strip')}
+                  className={cn(
+                    "flex-1 py-2 text-sm font-medium transition-colors",
+                    settings.layoutMode === 'strip' ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  Strip
+                </button>
+              </div>
             </div>
+
+            {settings.layoutMode === 'grid' ? (
+              <div className="space-y-2">
+                <label className="flex justify-between items-center">
+                  <span>Columns</span>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs flex items-center gap-1 cursor-pointer text-gray-400 hover:text-white">
+                      <input
+                        type="checkbox"
+                        checked={settings.dynamicColumns}
+                        onChange={(e) => handleChange('dynamicColumns', e.target.checked)}
+                        className="rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                      />
+                      Auto
+                    </label>
+                    <span className="text-white w-4 text-right">{settings.dynamicColumns ? (imagesCount || 1) : settings.columns}</span>
+                  </div>
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="24"
+                  value={settings.dynamicColumns ? Math.max(1, imagesCount) : settings.columns}
+                  onChange={(e) => {
+                    handleChange('dynamicColumns', false);
+                    handleChange('columns', parseInt(e.target.value));
+                  }}
+                  className="w-full accent-indigo-500"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="flex justify-between">
+                  <span>Image Width (px)</span>
+                  <span className="text-white">{settings.stripImageWidth}</span>
+                </label>
+                <input
+                  type="range"
+                  min="100"
+                  max="800"
+                  step="10"
+                  value={settings.stripImageWidth}
+                  onChange={(e) => handleChange('stripImageWidth', parseInt(e.target.value))}
+                  className="w-full accent-indigo-500"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="flex justify-between">
@@ -226,6 +268,19 @@ export function SettingsPanel({
 
             {settings.showTitles && (
               <>
+                <div className="space-y-2">
+                  <label className="block mb-1">Position</label>
+                  <select
+                    value={settings.titlePosition}
+                    onChange={(e) => handleChange('titlePosition', e.target.value)}
+                    className="w-full bg-[#0F0F12] border border-white/10 rounded-lg p-2 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="bottom">Below Image</option>
+                    <option value="top">Above Image</option>
+                    <option value="overlay">Overlay (Bottom)</option>
+                  </select>
+                </div>
+
                 <div className="space-y-2">
                   <label className="block mb-1">Title Color</label>
                   <div className="flex gap-2">

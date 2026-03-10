@@ -38,6 +38,11 @@ export function ImageCard({
     transition,
     zIndex: isDragging ? 10 : 1,
     opacity: isDragging ? 0.8 : 1,
+    ...(settings.layoutMode === 'strip' ? {
+      flex: `0 0 ${settings.stripImageWidth}px`,
+      width: `${settings.stripImageWidth}px`,
+      scrollSnapAlign: 'start',
+    } : {})
   };
 
   const handleSaveTitle = () => {
@@ -54,6 +59,57 @@ export function ImageCard({
     }
   };
 
+  const renderTitle = (position: 'top' | 'bottom' | 'overlay') => {
+    if (!settings.showTitles || settings.titlePosition !== position) return null;
+    return (
+      <div className={cn(
+        "flex items-center justify-center relative min-h-[24px]",
+        position === 'top' && "mb-2",
+        position === 'bottom' && "mt-2",
+        position === 'overlay' && "absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1 z-10"
+      )}>
+        {isEditing && !isExporting ? (
+          <div className="flex items-center gap-1 w-full px-1">
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSaveTitle}
+              autoFocus
+              className="flex-1 bg-white/10 border border-white/20 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 min-w-0"
+              style={{ color: settings.titleColor, fontSize: `${settings.titleFontSize}px` }}
+            />
+            <button
+              onClick={handleSaveTitle}
+              className="p-1 text-green-500 hover:bg-white/10 rounded shrink-0"
+            >
+              <Check size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 group/title w-full justify-center px-1">
+            <span
+              className="truncate text-center font-medium"
+              style={{ color: settings.titleColor, fontSize: `${settings.titleFontSize}px` }}
+              title={image.title}
+            >
+              {image.title}
+            </span>
+            {!isExporting && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="opacity-0 group-hover/title:opacity-100 p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all shrink-0"
+              >
+                <Edit2 size={12} />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -63,6 +119,8 @@ export function ImageCard({
         isDragging && "shadow-2xl ring-2 ring-indigo-500"
       )}
     >
+      {renderTitle('top')}
+
       {/* Image Container */}
       <div
         className="relative w-full overflow-hidden flex-grow"
@@ -82,9 +140,11 @@ export function ImageCard({
           draggable={false}
         />
         
+        {renderTitle('overlay')}
+
         {/* Hover Controls (Hidden during export) */}
         {!isExporting && (
-          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between p-2 pointer-events-none">
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between p-2 pointer-events-none z-20">
             <div
               {...attributes}
               {...listeners}
@@ -102,49 +162,7 @@ export function ImageCard({
         )}
       </div>
 
-      {/* Title Area */}
-      {settings.showTitles && (
-        <div className="mt-2 flex items-center justify-center relative min-h-[24px]">
-          {isEditing && !isExporting ? (
-            <div className="flex items-center gap-1 w-full">
-              <input
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onBlur={handleSaveTitle}
-                autoFocus
-                className="flex-1 bg-white/10 border border-white/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                style={{ color: settings.titleColor, fontSize: `${settings.titleFontSize}px` }}
-              />
-              <button
-                onClick={handleSaveTitle}
-                className="p-1 text-green-500 hover:bg-white/10 rounded"
-              >
-                <Check size={14} />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 group/title w-full justify-center">
-              <span
-                className="truncate text-center font-medium"
-                style={{ color: settings.titleColor, fontSize: `${settings.titleFontSize}px` }}
-                title={image.title}
-              >
-                {image.title}
-              </span>
-              {!isExporting && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="opacity-0 group-hover/title:opacity-100 p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all"
-                >
-                  <Edit2 size={12} />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {renderTitle('bottom')}
     </div>
   );
 }
